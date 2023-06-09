@@ -73,7 +73,7 @@
               // Comprueba si el juego ha terminado.
               if (checkWin(board, currentPlayer)) {
                 setTimeout(() => {
-                  alert(`Ganador!`)
+                  alert(`Ganaste!`)
                   resetGame()
                   updateModel(board, 1) // El jugador gana, actualiza el modelo.
                 }, 100)
