@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <style>
+      .Ta-Te-Ti {
+        width: 300px;
+        height: 300px;
+        margin: 0 auto;
+        border-collapse: collapse;
+      }
+
+      .Ta-Te-Ti td {
+        width: 100px;
+        height: 100px;
+        font-size: 48px;
+        font-weight: bold;
+        text-align: center;
+        vertical-align: middle;
+        border: 1px solid black;
+      }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.0.0/dist/tf.min.js"></script>
+  </head>
+  <body>
+    <div class="container">
+      <h1>TaTeTi</h1>
+      <table class="Ta-Te-Ti">
+        <tr>
+          <td id="cell-0"></td>
+          <td id="cell-1"></td>
+          <td id="cell-2"></td>
+        </tr>
+        <tr>
+          <td id="cell-3"></td>
+          <td id="cell-4"></td>
+          <td id="cell-5"></td>
+        </tr>
+        <tr>
+          <td id="cell-6"></td>
+          <td id="cell-7"></td>
+          <td id="cell-8"></td>
+        </tr>
+      </table>
+    </div>
+    <script>
+      tf.ready().then(async () => {
+        const epsilon = 0.2 // Exploración
+        const learningRate = 0.1
+        const discountFactor = 0.9
+
+        const modelPath = '/model/ttt_model.json'
+        const cells = Array.from(document.getElementsByTagName('td'))
+        const board = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+        let currentPlayer = 1
+
+        //Crear el modelo
+        let model
+        try {
+          model = await tf.loadLayersModel(modelPath)
+        } catch (error) {
+          model = createModel()
+        }
+
+        // Actualizar el estado del tablero cuando se hace clic en una celda
+        cells.forEach((cell, index) => {
+          cell.addEventListener('click', () => {
+            if (board[index] === 0 && currentPlayer === 1) {
+              board[index] = currentPlayer
+              cell.textContent = 'X'
+              cell.style.pointerEvents = 'none'
+
+              // Comprueba si el juego ha terminado.
+              if (checkWin(board, currentPlayer)) {
+                setTimeout(() => {
+                  alert(`Ganador!`)
+                  resetGame()
+                  updateModel(board, 1) // El jugador gana, actualiza el modelo.
+                }, 100)
+              } else if (board.every(cell => cell !== 0)) {
+                setTimeout(() => {
+                  alert("Es un empate!")
+                  resetGame()
+                  updateModel(board, 0) //Actualizar modelo
+                }, 100)
+              } else {
+                currentPlayer = -1
+                makeComputerMove()
+              }
+            }
+          })
+        })
+
+        function createModel() {
+          const model = tf.sequential()
+          model.add(tf.layers.dense({ units: 128, inputShape: [9], activation: 'relu' }))
+          model.add(tf.layers.dense({ units: 128, activation: 'relu' }))
+          model.add(tf.layers.dense({ units: 9, activation: 'linear' }))
+          model.compile({ optimizer: 'adam', loss: 'meanSquaredError' })
+          return model
+        }
+
+        function makeComputerMove() {
+          const input = tf.tensor([board])
+          const result = model.predict(input).arraySync()[0]
+
+          // Encuentre la celda vacía con la puntuación predicha más alta
+          let bestScore = -Infinity
+          let bestMove = -1
+          for (let i = 0; i < result.length; i++) {
+            if (board[i] === 0 && result[i] > bestScore) {
+              bestScore = result[i]
+              bestMove = i
+            }
+          }
+
+          // Haz que la computadora se mueva
+          board[bestMove] = currentPlayer
+          cells[bestMove].textContent = 'O'
+          cells[bestMove].style.pointerEvents = 'none'
+
+          // Comprueba si el juego ha terminado.
+          if (checkWin(board, currentPlayer)) {
+            setTimeout(() => {
+              alert(`Perdiste!`)
+              resetGame()
+              updateModel(board, -1) // La computadora gana, actualice el juego
+            }, 100)
+          } else if (board.every(cell => cell !== 0)) {
+            setTimeout(() => {
+              alert("It's a draw!")
+              resetGame()
+              updateModel(board, 0) // Actualizar modelo
+            }, 100)
+          } else {
+            currentPlayer = 1
+          }
+        }
+
+        function updateModel(input, reward) {
+          const target = model.predict(tf.tensor([input])).arraySync()[0]
+          const maxQ = Math.max(...target)
+
+          target[input.findIndex(value => value === 0)] = reward + discountFactor * maxQ
+          const xs = tf.tensor([input])
+          const ys = tf.tensor([target])
+          const loss = tf.losses.meanSquaredError
+          const optimizer = tf.train.adam(learningRate)
+          model.compile({ optimizer, loss })
+          model.fit(xs, ys, { epochs: 10000 })
+            .then(() => {
+              console.log('Model updated successfully')
+            })
+            .catch(error => {
+              console.error('Failed to update model:', error)
+            })
+        }
+
+        function checkWin(board, player) {
+          const winPatterns = [
+            [0, 1, 2], [3, 4, 5], [6, 7, 8], // Filas
+            [0, 3, 6], [1, 4, 7], [2, 5, 8], // Columnas
+            [0, 4, 8], [2, 4, 6] // Diagonales
+          ]
+
+          return winPatterns.some(pattern => {
+            return pattern.every(index => board[index] === player)
+          })
+        }
+
+        function resetGame() {
+          board.fill(0)
+          cells.forEach(cell => {
+            cell.textContent = ''
+            cell.style.pointerEvents = 'auto'
+          })
+          currentPlayer = 1
+        }
+      })
+    </script>
+  </body>
+</html>
